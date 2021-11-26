@@ -7,10 +7,7 @@ import org.eclipse.emf.ecore.resource.Resource
 import org.eclipse.xtext.generator.AbstractGenerator
 import org.eclipse.xtext.generator.IFileSystemAccess2
 import org.eclipse.xtext.generator.IGeneratorContext
-import org.example.entities.entities.Entity
-import org.example.entities.entities.AttributeType
-import org.example.entities.entities.BasicType
-import org.example.entities.entities.EntityType
+import org.example.entities.entities.Entity;
 
 /**
  * Generates code from your model files on save.
@@ -21,68 +18,22 @@ class EntitiesGenerator extends AbstractGenerator {
 
 	override void doGenerate(Resource resource, IFileSystemAccess2 fsa, IGeneratorContext context) {
 		for (e : resource.allContents.toIterable.filter(typeof(Entity))) {
-			fsa.generateFile("entities/" + e.name + ".java", e.compile)
-			fsa.generateFile("entities/" + e.name + ".sql", e.compileSchema)
+			compileSchema(fsa, e);
+			compileApi(fsa, e);
+			compileFrontEnd(fsa, e);
 		}
 	}
 
-	def compileSchema(Entity entity) {
-		'''
-			IF NOT  EXISTS (SELECT 1 FROM dbo.sysobjects WHERE id = object_id(N'[dbo].[«entity.name»]')) 
-			BEGIN
-			
-				CREATE TABLE [dbo].[«entity.name»](
-				[Id«entity.name»] [int] IDENTITY(1,1) NOT NULL,
-				«IF entity.superType !== null»
-					[Id«entity.superType.name»] [int] NOT NULL, 
-				«ENDIF»
-				«FOR attribute : entity.attributes»
-					[«attribute.type.compile» «attribute.name»] [varchar],
-				«ENDFOR»
-				CONSTRAINT [PK_«entity.name»] PRIMARY KEY CLUSTERED 
-				(
-					[Id«entity.name»] ASC
-				))
-				
-				«IF entity.superType !== null»
-					ALTER TABLE [dbo].[«entity.name»] ADD CONSTRAINT [FK_«entity.name»_«entity.superType.name»]
-					FOREIGN KEY ([Id«entity.superType.name»]) REFERENCES [dbo].[«entity.superType.name»] ([Id«entity.superType.name»]) ON DELETE No Action ON UPDATE No Action 
-				«ENDIF»
-			END
-		'''
+	def compileSchema(IFileSystemAccess2 fsa, Entity entity) {
+		new SqlGenerator().compile(fsa, entity);
 	}
 
-	def compile(Entity entity) {
-		'''
-			package entities;
-			
-			public class «entity.name» «IF entity.superType !== null»extends «entity.superType.name» «ENDIF»{
-				«FOR attribute : entity.attributes»
-					private «attribute.type.compile» «attribute.name»;
-				«ENDFOR»
-				«FOR attribute : entity.attributes»
-					public «attribute.type.compile» get«attribute.name.toFirstUpper»() {
-						return «attribute.name»;
-					}
-					
-					public void set«attribute.name.toFirstUpper»(«attribute.type.compile» _arg) {
-						this.«attribute.name» = _arg;
-					}
-					
-				«ENDFOR»
-			}
-		'''
+	def compileApi(IFileSystemAccess2 fsa, Entity entity) {
+		new ApiGenerator().compile(fsa, entity);
 	}
 
-	def compile(AttributeType attributeType) {
-		attributeType.elementType.typeToString + if(attributeType.array) "[]" else ""
+	def compileFrontEnd(IFileSystemAccess2 fsa, Entity entity) {
+		new FrontEndGenerator().compile(fsa, entity);
 	}
 
-	def dispatch typeToString(BasicType type) {
-		if(type.typeName == "string") "String" else type.typeName
-	}
-
-	def dispatch typeToString(EntityType type) {
-		type.entity.name
-	}
 }
